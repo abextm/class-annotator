@@ -1,0 +1,12 @@
+[package]
+name = "class-annotator"
+version = "0.1.0"
+authors = ["Max Weber <mii7303@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+byteorder = "1"
+error-chain = "0.12.2"
+enum-kinds = "0.4.1"
