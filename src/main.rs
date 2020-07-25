@@ -508,8 +508,30 @@ implements {}", CPLookup(&self.cp, CPEntryKind::Class, iface)));
 			("Code", ObjectType::Method) => self.read_code()?,
 			("SourceFile", ObjectType::Class) => {
 				self.explain_read("SourceFile attribute (JVMS§4.7.10)");
+				self.indent(1);
 				let sourcefile_index = self.read_cp()?;
 				self.fi.explain_read(format!("sourcefile in {}", CPLookup(&self.cp, CPEntryKind::Utf8, sourcefile_index)));
+				self.indent(-1);
+			},
+			("RuntimeVisibleAnnotations", _) => {
+				self.explain_read("RuntimeVisibleAnnotations attribute (JVMS§4.7.16)");
+				self.indent(1);
+				let num_annotations = self.read_u16()?;
+				self.fi.explain_read(format!("{} annotations", num_annotations));
+				for _ in 0..num_annotations {
+					self.read_annotation()?;
+				}
+				self.indent(-1);
+			},
+			("RuntimeInvisibleAnnotations", _) => {
+				self.explain_read("RuntimeInvisibleAnnotations attribute (JVMS§4.7.17)");
+				self.indent(1);
+				let num_annotations = self.read_u16()?;
+				self.fi.explain_read(format!("{} annotations", num_annotations));
+				for _ in 0..num_annotations {
+					self.read_annotation()?;
+				}
+				self.indent(-1);
 			},
 			_ => {
 				let mut buf = vec![0; length as usize];
@@ -517,6 +539,68 @@ implements {}", CPLookup(&self.cp, CPEntryKind::Class, iface)));
 				self.fi.explain_read(format!("attribute with name ({}) of length {}", CPLookup(&self.cp, CPEntryKind::Utf8, name_index), length))
 			},
 		}
+		Ok(())
+	}
+
+	fn read_annotation(&mut self) -> Result<()> {
+		let type_name_index = self.read_cp()?;
+		let num_element_value_pairs = self.read_u16()?;
+		self.fi.explain_read(format!("annotation type ({}) with {} elements",
+			CPLookup(&self.cp, CPEntryKind::Utf8, type_name_index), num_element_value_pairs));
+		self.indent(1);
+		for _ in 0..num_element_value_pairs {
+			let element_name_index = self.read_cp()?;
+			self.fi.explain_read(format!("element with name ({}) (JVMS§4.7.16.1)", CPLookup(&self.cp, CPEntryKind::Utf8, element_name_index)));
+			self.read_annotation_element()?;
+		}
+		self.indent(-1);
+		Ok(())
+	}
+
+	fn read_annotation_element(&mut self) -> Result<()> {
+		self.indent(1);
+		let tag = self.read_u8()?;
+		match tag {
+			b'e' => {
+				let type_name_index = self.read_cp()?;
+				let const_name_index = self.read_cp()?;
+				self.fi.explain_read(format!("enum type ({}) with value ({})",
+					CPLookup(&self.cp, CPEntryKind::Utf8, type_name_index),
+					CPLookup(&self.cp, CPEntryKind::Utf8, const_name_index)));
+			},
+			b'c' => {
+				let class_info_index = self.read_cp()?;
+				self.fi.explain_read(format!("class type ({})",
+					CPLookup(&self.cp, CPEntryKind::Utf8, class_info_index)));
+			},
+			b'@' => {
+				self.read_annotation()?;
+			},
+			b'[' => {
+				let num_values = self.read_u16()?;
+				self.explain_read(format!("array of {} values", num_values));
+				for _ in 0..num_values {
+					self.read_annotation_element()?;
+				}
+			},
+			_ => {
+				let (name, kind) = match tag {
+					b's' => ("String", CPEntryKind::String),
+					b'B' => ("byte", CPEntryKind::Integer),
+					b'C' => ("char", CPEntryKind::Integer),
+					b'S' => ("short", CPEntryKind::Integer),
+					b'I' => ("int", CPEntryKind::Integer),
+					b'F' => ("float", CPEntryKind::Float),
+					b'D' => ("double", CPEntryKind::Double),
+					b'J' => ("long", CPEntryKind::Long),
+					b'Z' => ("boolean", CPEntryKind::Integer),
+					_ => panic!("Unknown tag type {}", tag),
+				};
+				let const_value_index = self.read_cp()?;
+				self.fi.explain_read(format!("{} with value ({})", name, CPLookup(&self.cp, kind, const_value_index)));
+			},
+		}
+		self.indent(-1);
 		Ok(())
 	}
 
