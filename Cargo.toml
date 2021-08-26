@@ -9,4 +9,3 @@ edition = "2018"
 [dependencies]
 byteorder = "1"
 error-chain = "0.12.2"
-enum-kinds = "0.4.1"
