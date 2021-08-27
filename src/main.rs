@@ -85,6 +85,9 @@ impl<T: io::Read> RememberingBuffer<T> {
 
 	fn indent(&mut self, delta: i32) {
 		self.indent += delta;
+		if self.indent < 0 {
+			panic!("mismatched indent");
+		}
 	}
 }
 
@@ -735,7 +738,6 @@ exception handler {} from {} to {}. handler at {}; catches {}",
 	}
 
 	fn read_bytecode(&mut self, end: usize) -> Result<()> {
-		let mut buf = vec![0; end - self.offset];
 		let start = self.offset;
 		let mut is_wide = false;
 		while self.offset < end {
@@ -743,7 +745,7 @@ exception handler {} from {} to {}. handler at {}; catches {}",
 				0x32 => self.explain_read("aaload (JVMS§6.5)"),
 				0x53 => self.explain_read("aastore (JVMS§6.5)"),
 				0x01 => self.explain_read("aconst_null (JVMS§6.5)"),
-				0x25 => {
+				0x19 => {
 					let index = self.read_maybewide(is_wide)?;
 					self.explain_read(format!("aload {} (JVMS§6.5)", index));
 				},
@@ -957,7 +959,10 @@ exception handler {} from {} to {}. handler at {}; catches {}",
 					self.fi.explain_read(format!("ldc2_w {} (JVMS§6.5)", CPLookup(&self.cp, CPEntryKind::AnyConstant2, typ)));
 				},
 				0x6d => self.explain_read("ldiv (JVMS§6.5)"),
-				0x16 => self.explain_read("lload (JVMS§6.5)"),
+				0x16 => {
+					let index = self.read_maybewide(is_wide)?;
+					self.explain_read(format!("lload {} (JVMS§6.5)", index));
+				},
 				index if index >= 0x1e && index <= 0x21 => self.explain_read(format!("lload_{} (JVMS§6.5)", index - 0x1e)),
 				0x69 => self.explain_read("lmul (JVMS§6.5)"),
 				0x75 => self.explain_read("lneg (JVMS§6.5)"),
@@ -1065,6 +1070,9 @@ exception handler {} from {} to {}. handler at {}; catches {}",
 				}
 				0xc4 => {
 					self.explain_read("wide (JVMS§6.5)");
+					if !is_wide {
+						self.indent(1);
+					}
 					is_wide = true;
 					continue;
 				},
@@ -1075,7 +1083,8 @@ exception handler {} from {} to {}. handler at {}; catches {}",
 			}
 			is_wide = false;
 		}
-		if self.offset < end {
+		if self.offset + 1 < end {
+			let mut buf = vec![0; end - (self.offset + 1)];
 			self.read_exact(&mut buf)?;
 			self.explain_read("remaining unknown bytecode");
 		}
